@@ -62,8 +62,10 @@ import ml.docilealligator.infinityforreddit.SortTypeSelectionCallback;
 import ml.docilealligator.infinityforreddit.asynctasks.SwitchAccount;
 import ml.docilealligator.infinityforreddit.comment.Comment;
 import ml.docilealligator.infinityforreddit.customtheme.CustomThemeWrapper;
+import ml.docilealligator.infinityforreddit.events.NeedForMorePostsFromPostFragmentEvent;
 import ml.docilealligator.infinityforreddit.events.NeedForPostListFromPostFragmentEvent;
 import ml.docilealligator.infinityforreddit.events.ProvidePostListToViewPostDetailActivityEvent;
+import ml.docilealligator.infinityforreddit.events.ProvideSlidePositionToPostFragmentEvent;
 import ml.docilealligator.infinityforreddit.events.SwitchAccountEvent;
 import ml.docilealligator.infinityforreddit.fragments.ViewPostDetailFragment;
 import ml.docilealligator.infinityforreddit.post.Post;
@@ -138,7 +140,7 @@ public class ViewPostDetailActivity extends BaseActivity implements SortTypeSele
     private int orientation;
     private boolean mVolumeKeysNavigateComments;
     private boolean isNsfwSubreddit;
-
+    private ViewPager2.OnPageChangeCallback onPageChangeCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -319,7 +321,7 @@ public class ViewPostDetailActivity extends BaseActivity implements SortTypeSele
         }
 
         searchPanelMaterialCardView.setOnClickListener(null);
-        
+
         nextResultImageView.setOnClickListener(view -> {
             ViewPostDetailFragment fragment = sectionsPagerAdapter.getCurrentFragment();
             if (fragment != null) {
@@ -342,6 +344,19 @@ public class ViewPostDetailActivity extends BaseActivity implements SortTypeSele
 
             searchPanelMaterialCardView.setVisibility(View.GONE);
         });
+
+        boolean swipeBetweenPosts = mSharedPreferences.getBoolean(SharedPreferencesUtils.SWIPE_BETWEEN_POSTS, false);
+        if (swipeBetweenPosts) {
+            onPageChangeCallback = new ViewPager2.OnPageChangeCallback() {
+                @Override
+                public void onPageSelected(int position) {
+                    super.onPageSelected(position);
+                    EventBus.getDefault().post(new ProvideSlidePositionToPostFragmentEvent(postFragmentId, position));
+                }
+            };
+
+            viewPager2.registerOnPageChangeCallback(onPageChangeCallback);
+        }
     }
 
     public boolean isNsfwSubreddit() {
@@ -456,7 +471,7 @@ public class ViewPostDetailActivity extends BaseActivity implements SortTypeSele
 
     @Subscribe
     public void onProvidePostListToViewPostDetailActivityEvent(ProvidePostListToViewPostDetailActivityEvent event) {
-        if (event.postFragmentId == postFragmentId && posts == null) {
+        if (event.postFragmentId == postFragmentId) {
             posts = event.posts;
             if (sectionsPagerAdapter != null) {
                 if (postListPosition > 0)
@@ -532,6 +547,9 @@ public class ViewPostDetailActivity extends BaseActivity implements SortTypeSele
     @Override
     protected void onDestroy() {
         EventBus.getDefault().unregister(this);
+        if (onPageChangeCallback != null) {
+            viewPager2.unregisterOnPageChangeCallback(onPageChangeCallback);
+        }
         super.onDestroy();
         Bridge.clear(this);
         BigImageViewer.imageLoader().cancelAll();
@@ -605,6 +623,9 @@ public class ViewPostDetailActivity extends BaseActivity implements SortTypeSele
                 } else {
                     bundle.putParcelable(ViewPostDetailFragment.EXTRA_POST_DATA, posts.get(position));
                     bundle.putInt(ViewPostDetailFragment.EXTRA_POST_LIST_POSITION, position);
+                }
+                if (position >= posts.size() - 2) {
+                    EventBus.getDefault().post(new NeedForMorePostsFromPostFragmentEvent(postFragmentId));
                 }
             } else {
                 if (post == null) {

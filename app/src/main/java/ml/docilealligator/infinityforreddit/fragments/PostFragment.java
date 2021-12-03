@@ -121,9 +121,11 @@ import ml.docilealligator.infinityforreddit.events.ChangeTimeFormatEvent;
 import ml.docilealligator.infinityforreddit.events.ChangeVibrateWhenActionTriggeredEvent;
 import ml.docilealligator.infinityforreddit.events.ChangeVideoAutoplayEvent;
 import ml.docilealligator.infinityforreddit.events.ChangeVoteButtonsPositionEvent;
+import ml.docilealligator.infinityforreddit.events.NeedForMorePostsFromPostFragmentEvent;
 import ml.docilealligator.infinityforreddit.events.NeedForPostListFromPostFragmentEvent;
 import ml.docilealligator.infinityforreddit.events.PostUpdateEventToPostList;
 import ml.docilealligator.infinityforreddit.events.ProvidePostListToViewPostDetailActivityEvent;
+import ml.docilealligator.infinityforreddit.events.ProvideSlidePositionToPostFragmentEvent;
 import ml.docilealligator.infinityforreddit.events.ShowDividerInCompactLayoutPreferenceEvent;
 import ml.docilealligator.infinityforreddit.events.ShowThumbnailOnTheRightInCompactLayoutEvent;
 import ml.docilealligator.infinityforreddit.post.Post;
@@ -158,7 +160,7 @@ public class PostFragment extends Fragment implements FragmentCommunicator {
     private static final String POST_FILTER_STATE = "PFS";
     private static final String CONCATENATED_SUBREDDIT_NAMES_STATE = "CSNS";
     private static final String POST_FRAGMENT_ID_STATE = "PFIS";
-
+    private final Map<String, String> subredditOrUserIcons = new HashMap<>();
     @BindView(R.id.swipe_refresh_layout_post_fragment)
     SwipeRefreshLayout mSwipeRefreshLayout;
     @BindView(R.id.recycler_view_post_fragment)
@@ -218,6 +220,8 @@ public class PostFragment extends Fragment implements FragmentCommunicator {
     private boolean isInLazyMode = false;
     private boolean isLazyModePaused = false;
     private boolean hasPost = false;
+    private boolean isLoadMorePosts = false;
+    private boolean isScrollingToPosition = false;
     private boolean savePostFeedScrolledPosition;
     private boolean rememberMutingOptionInPostFeed;
     private Boolean masterMutingOption;
@@ -251,7 +255,7 @@ public class PostFragment extends Fragment implements FragmentCommunicator {
     private ItemTouchHelper touchHelper;
     private ArrayList<String> readPosts;
     private Unbinder unbinder;
-    private Map<String, String> subredditOrUserIcons = new HashMap<>();
+    private int previousItemCount = 0;
 
     public PostFragment() {
         // Required empty public constructor
@@ -1265,6 +1269,11 @@ public class PostFragment extends Fragment implements FragmentCommunicator {
                     noPostFound();
                 }
             }
+            if (isLoadMorePosts && mAdapter.getItemCount() > 0 && mAdapter.getItemCount() > previousItemCount) {
+                previousItemCount = mAdapter.getItemCount();
+                EventBus.getDefault().post(new ProvidePostListToViewPostDetailActivityEvent(postFragmentId, new ArrayList<>(mAdapter.snapshot())));
+                isLoadMorePosts = false;
+            }
             return null;
         });
 
@@ -1989,6 +1998,30 @@ public class PostFragment extends Fragment implements FragmentCommunicator {
     }
 
     @Subscribe
+    public void onPostDetailSlidePositionChangeEvent(NeedForMorePostsFromPostFragmentEvent event) {
+        if (postFragmentId == event.postFragmentTimeId
+                && !isLoadMorePosts
+                && mAdapter != null
+                && mPostRecyclerView != null) {
+            isLoadMorePosts = true;
+            mPostRecyclerView.smoothScrollToPosition(mAdapter.getItemCount() - 1);
+        }
+    }
+
+    @Subscribe
+    public void onScrollPositionChangeEvent(ProvideSlidePositionToPostFragmentEvent event) {
+        if (postFragmentId == event.postFragmentTimeId
+                && !isLoadMorePosts
+                && !isScrollingToPosition
+                && mAdapter != null
+                && mPostRecyclerView != null) {
+            isScrollingToPosition = true;
+            mPostRecyclerView.smoothScrollToPosition(event.postSlidePosition + 1);
+            isScrollingToPosition = false;
+        }
+    }
+
+    @Subscribe
     public void onNeedForPostListFromPostRecyclerViewAdapterEvent(NeedForPostListFromPostFragmentEvent event) {
         if (postFragmentId == event.postFragmentTimeId && mAdapter != null) {
             EventBus.getDefault().post(new ProvidePostListToViewPostDetailActivityEvent(postFragmentId, new ArrayList<>(mAdapter.snapshot())));
@@ -2115,6 +2148,10 @@ public class PostFragment extends Fragment implements FragmentCommunicator {
         super.onDestroy();
     }
 
+    public interface LoadIconListener {
+        void loadIconSuccess(String subredditOrUserName, String iconUrl);
+    }
+
     private static abstract class LazyModeRunnable implements Runnable {
         private int currentPosition = -1;
 
@@ -2137,8 +2174,8 @@ public class PostFragment extends Fragment implements FragmentCommunicator {
 
     private static class StaggeredGridLayoutManagerItemOffsetDecoration extends RecyclerView.ItemDecoration {
 
-        private int mItemOffset;
-        private int mNColumns;
+        private final int mItemOffset;
+        private final int mNColumns;
 
         StaggeredGridLayoutManagerItemOffsetDecoration(int itemOffset, int nColumns) {
             mItemOffset = itemOffset;
@@ -2176,9 +2213,5 @@ public class PostFragment extends Fragment implements FragmentCommunicator {
                 }
             }
         }
-    }
-
-    public interface LoadIconListener {
-        void loadIconSuccess(String subredditOrUserName, String iconUrl);
     }
 }
