@@ -42,7 +42,6 @@ public class SpoilerParserPlugin extends AbstractMarkwonPlugin {
 
         Set<Class<? extends Block>> blocks = CorePlugin.enabledBlockTypes();
         blocks.remove(HtmlBlock.class);
-        blocks.remove(HtmlInline.class);
         blocks.remove(BlockQuote.class);
 
         builder.enabledBlockTypes(blocks);

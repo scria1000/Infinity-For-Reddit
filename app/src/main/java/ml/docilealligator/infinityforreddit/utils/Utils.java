@@ -98,7 +98,7 @@ public final class Utils {
         int nCarets = 0;
         for (int i = 0; i < regexed.length(); i++) {
             char currentChar = regexed.charAt(i);
-            if (currentChar == '^') {
+            if ((i + 1) < regexed.length() && currentChar == '^' && regexed.charAt(i+1) != '\n') {
                 if (!(i > 0 && regexed.charAt(i - 1) == '\\')) {
                     if (i < regexed.length() - 1 && regexed.charAt(i + 1) == '(') {
                         regexed.replace(i, i + 2, "<sup>");

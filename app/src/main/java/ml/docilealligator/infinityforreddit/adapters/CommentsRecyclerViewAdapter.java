@@ -31,8 +31,16 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.lsjwzh.widget.materialloadingprogressbar.CircleProgressBar;
 
+import org.commonmark.node.Block;
+import org.commonmark.node.BlockQuote;
+import org.commonmark.node.HtmlBlock;
+import org.commonmark.node.HtmlInline;
+import org.commonmark.parser.Parser;
+
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.Set;
+import java.util.Stack;
 import java.util.concurrent.Executor;
 
 import butterknife.BindView;
@@ -40,14 +48,14 @@ import butterknife.ButterKnife;
 import io.noties.markwon.AbstractMarkwonPlugin;
 import io.noties.markwon.Markwon;
 import io.noties.markwon.MarkwonConfiguration;
+import io.noties.markwon.MarkwonSpansFactory;
+import io.noties.markwon.MarkwonVisitor;
+import io.noties.markwon.core.CorePlugin;
 import io.noties.markwon.core.MarkwonTheme;
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin;
 import io.noties.markwon.html.HtmlPlugin;
+import io.noties.markwon.html.span.SuperScriptSpan;
 import io.noties.markwon.html.tag.SuperScriptHandler;
-import io.noties.markwon.inlineparser.BackslashInlineProcessor;
-import io.noties.markwon.inlineparser.BangInlineProcessor;
-import io.noties.markwon.inlineparser.HtmlInlineProcessor;
-import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin;
 import io.noties.markwon.linkify.LinkifyPlugin;
 import io.noties.markwon.movement.MovementMethodPlugin;
 import me.saket.bettermovementmethod.BetterLinkMovementMethod;
@@ -66,8 +74,9 @@ import ml.docilealligator.infinityforreddit.customtheme.CustomThemeWrapper;
 import ml.docilealligator.infinityforreddit.customviews.CommentIndentationView;
 import ml.docilealligator.infinityforreddit.customviews.SpoilerOnClickTextView;
 import ml.docilealligator.infinityforreddit.fragments.ViewPostDetailFragment;
+import ml.docilealligator.infinityforreddit.markdown.CustomInlineParser;
 import ml.docilealligator.infinityforreddit.markdown.SpoilerParserPlugin;
-import ml.docilealligator.infinityforreddit.markdown.SuperscriptInlineProcessor;
+import ml.docilealligator.infinityforreddit.markdown.Superscript;
 import ml.docilealligator.infinityforreddit.post.Post;
 import ml.docilealligator.infinityforreddit.utils.APIUtils;
 import ml.docilealligator.infinityforreddit.utils.SharedPreferencesUtils;
@@ -85,62 +94,62 @@ public class CommentsRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerVi
     private static final int VIEW_TYPE_LOAD_MORE_COMMENTS_FAILED = 16;
     private static final int VIEW_TYPE_VIEW_ALL_COMMENTS = 17;
 
-    private AppCompatActivity mActivity;
-    private ViewPostDetailFragment mFragment;
-    private Executor mExecutor;
-    private Retrofit mRetrofit;
-    private Retrofit mOauthRetrofit;
-    private Markwon mCommentMarkwon;
-    private String mAccessToken;
-    private String mAccountName;
-    private Post mPost;
-    private ArrayList<Comment> mVisibleComments;
-    private Locale mLocale;
+    private final AppCompatActivity mActivity;
+    private final ViewPostDetailFragment mFragment;
+    private final Executor mExecutor;
+    private final Retrofit mRetrofit;
+    private final Retrofit mOauthRetrofit;
+    private final Markwon mCommentMarkwon;
+    private final String mAccessToken;
+    private final String mAccountName;
+    private final Post mPost;
+    private final ArrayList<Comment> mVisibleComments;
+    private final Locale mLocale;
     private String mSingleCommentId;
     private boolean mIsSingleCommentThreadMode;
-    private boolean mVoteButtonsOnTheRight;
-    private boolean mShowElapsedTime;
-    private String mTimeFormatPattern;
-    private boolean mExpandChildren;
-    private boolean mCommentToolbarHidden;
-    private boolean mCommentToolbarHideOnClick;
-    private boolean mSwapTapAndLong;
-    private boolean mShowCommentDivider;
-    private boolean mShowAbsoluteNumberOfVotes;
-    private boolean mFullyCollapseComment;
-    private boolean mShowOnlyOneCommentLevelIndicator;
-    private CommentRecyclerViewAdapterCallback mCommentRecyclerViewAdapterCallback;
+    private final boolean mVoteButtonsOnTheRight;
+    private final boolean mShowElapsedTime;
+    private final String mTimeFormatPattern;
+    private final boolean mExpandChildren;
+    private final boolean mCommentToolbarHidden;
+    private final boolean mCommentToolbarHideOnClick;
+    private final boolean mSwapTapAndLong;
+    private final boolean mShowCommentDivider;
+    private final boolean mShowAbsoluteNumberOfVotes;
+    private final boolean mFullyCollapseComment;
+    private final boolean mShowOnlyOneCommentLevelIndicator;
+    private final CommentRecyclerViewAdapterCallback mCommentRecyclerViewAdapterCallback;
     private boolean isInitiallyLoading;
     private boolean isInitiallyLoadingFailed;
     private boolean mHasMoreComments;
     private boolean loadMoreCommentsFailed;
 
-    private int depthThreshold = 5;
-    private int mColorPrimaryLightTheme;
-    private int mColorAccent;
-    private int mCircularProgressBarBackgroundColor;
-    private int mSecondaryTextColor;
-    private int mPrimaryTextColor;
-    private int mCommentTextColor;
-    private int mCommentBackgroundColor;
-    private int mDividerColor;
-    private int mUsernameColor;
-    private int mSubmitterColor;
-    private int mModeratorColor;
-    private int mCurrentUserColor;
-    private int mAuthorFlairTextColor;
-    private int mUpvotedColor;
-    private int mDownvotedColor;
-    private int mSingleCommentThreadBackgroundColor;
-    private int mVoteAndReplyUnavailableVoteButtonColor;
-    private int mButtonTextColor;
-    private int mPostIconAndInfoColor;
-    private int mCommentIconAndInfoColor;
-    private int mFullyCollapsedCommentBackgroundColor;
-    private int mAwardedCommentBackgroundColor;
-    private Integer[] verticalBlockColors;
+    private final int depthThreshold = 5;
+    private final int mColorPrimaryLightTheme;
+    private final int mColorAccent;
+    private final int mCircularProgressBarBackgroundColor;
+    private final int mSecondaryTextColor;
+    private final int mPrimaryTextColor;
+    private final int mCommentTextColor;
+    private final int mCommentBackgroundColor;
+    private final int mDividerColor;
+    private final int mUsernameColor;
+    private final int mSubmitterColor;
+    private final int mModeratorColor;
+    private final int mCurrentUserColor;
+    private final int mAuthorFlairTextColor;
+    private final int mUpvotedColor;
+    private final int mDownvotedColor;
+    private final int mSingleCommentThreadBackgroundColor;
+    private final int mVoteAndReplyUnavailableVoteButtonColor;
+    private final int mButtonTextColor;
+    private final int mPostIconAndInfoColor;
+    private final int mCommentIconAndInfoColor;
+    private final int mFullyCollapsedCommentBackgroundColor;
+    private final int mAwardedCommentBackgroundColor;
+    private final Integer[] verticalBlockColors;
 
-    private Drawable mCommentIcon;
+    private final Drawable mCommentIcon;
 
     private int mSearchCommentIndex = -1;
 
@@ -162,19 +171,52 @@ public class CommentsRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerVi
         int commentSpoilerBackgroundColor = mCommentTextColor | 0xFF000000;
         int linkColor = customThemeWrapper.getLinkColor();
         mCommentMarkwon = Markwon.builder(mActivity)
-                .usePlugin(MarkwonInlineParserPlugin.create(plugin -> {
+                /*.usePlugin(MarkwonInlineParserPlugin.create(plugin -> {
                     plugin.excludeInlineProcessor(HtmlInlineProcessor.class);
                     plugin.excludeInlineProcessor(BangInlineProcessor.class);
                     plugin.addInlineProcessor(new SuperscriptInlineProcessor());
-                }))
-                .usePlugin(HtmlPlugin.create(plugin -> {
-                    plugin.excludeDefaults(true).addHandler(new SuperScriptHandler());
-                }))
+                }))*/
                 .usePlugin(new AbstractMarkwonPlugin() {
+                    final Stack<Integer> superScriptStack = new Stack<>();
+
                     @NonNull
                     @Override
                     public String processMarkdown(@NonNull String markdown) {
-                        return super.processMarkdown(Utils.fixSuperScript(markdown));
+                        String superscript = Utils.fixSuperScript(markdown);
+                        return superscript;
+                    }
+
+
+                    @Override
+                    public void afterSetText(@NonNull TextView textView) {
+                        super.afterSetText(textView);
+                    }
+
+                    @Override
+                    public void configureVisitor(@NonNull MarkwonVisitor.Builder builder) {
+                        builder.on(HtmlInline.class, (visitor, htmlInline) -> {
+                            final int start = visitor.length();
+                            final String literal = htmlInline.getLiteral();
+                            if (literal.equals("<sup>")) {
+                                superScriptStack.push(start);
+                            } else if (!superScriptStack.isEmpty() && literal.equals("</sup>")) {
+                                var beginning = superScriptStack.pop();
+                                visitor.setSpans(beginning, new SuperScriptSpan());
+                            } else {
+                                visitor.builder().append(htmlInline.getLiteral());
+                            }
+                        });
+                        builder.on(Superscript.class, (visitor, superscript) -> {
+                            final int start = visitor.length();
+                            visitor.visitChildren(superscript);
+                            visitor.builder().append(superscript.getLiteral());
+                            visitor.setSpans(start, new SuperScriptSpan());
+                        });
+                    }
+
+                    @Override
+                    public void configureSpansFactory(@NonNull MarkwonSpansFactory.Builder builder) {
+                        builder.setFactory(HtmlInline.class, null);
                     }
 
                     @Override
@@ -186,6 +228,11 @@ public class CommentsRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerVi
                             intent.putExtra(LinkResolverActivity.EXTRA_IS_NSFW, mPost.isNSFW());
                             mActivity.startActivity(intent);
                         });
+                    }
+
+                    @Override
+                    public void configureParser(@NonNull Parser.Builder builder) {
+                        //builder.inlineParserFactory(CustomInlineParser::new);
                     }
 
                     @Override
@@ -256,7 +303,7 @@ public class CommentsRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerVi
         mFullyCollapsedCommentBackgroundColor = customThemeWrapper.getFullyCollapsedCommentBackgroundColor();
         mAwardedCommentBackgroundColor = customThemeWrapper.getAwardedCommentBackgroundColor();
 
-        verticalBlockColors = new Integer[] {
+        verticalBlockColors = new Integer[]{
                 customThemeWrapper.getCommentVerticalBarColor1(),
                 customThemeWrapper.getCommentVerticalBarColor2(),
                 customThemeWrapper.getCommentVerticalBarColor3(),
@@ -1041,6 +1088,26 @@ public class CommentsRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerVi
         }
     }
 
+    @Nullable
+    private Comment getCurrentComment(RecyclerView.ViewHolder holder) {
+        return getCurrentComment(holder.getBindingAdapterPosition());
+    }
+
+    @Nullable
+    private Comment getCurrentComment(int position) {
+        if (mIsSingleCommentThreadMode) {
+            if (position - 1 >= 0 && position - 1 < mVisibleComments.size()) {
+                return mVisibleComments.get(position - 1);
+            }
+        } else {
+            if (position >= 0 && position < mVisibleComments.size()) {
+                return mVisibleComments.get(position);
+            }
+        }
+
+        return null;
+    }
+
     public interface CommentRecyclerViewAdapterCallback {
         void retryFetchingComments();
 
@@ -1507,26 +1574,6 @@ public class CommentsRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerVi
             }
             return true;
         }
-    }
-
-    @Nullable
-    private Comment getCurrentComment(RecyclerView.ViewHolder holder) {
-        return getCurrentComment(holder.getBindingAdapterPosition());
-    }
-
-    @Nullable
-    private Comment getCurrentComment(int position) {
-        if (mIsSingleCommentThreadMode) {
-            if (position - 1 >= 0 && position - 1 < mVisibleComments.size()) {
-                return mVisibleComments.get(position - 1);
-            }
-        } else {
-            if (position >= 0 && position < mVisibleComments.size()) {
-                return mVisibleComments.get(position);
-            }
-        }
-
-        return null;
     }
 
     class CommentFullyCollapsedViewHolder extends RecyclerView.ViewHolder {
